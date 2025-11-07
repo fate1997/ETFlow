@@ -1,6 +1,7 @@
 dataset/
 *debug.ipynb
 *.csv
+*.pbs
 
 **/__pycache__/
 
