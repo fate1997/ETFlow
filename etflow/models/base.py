@@ -150,7 +150,7 @@ class BaseModel(LightningModule):
         self.log(
             key,
             value,
-            on_step=False,
+            on_step=True,
             on_epoch=True,
             prog_bar=True,
             logger=True,

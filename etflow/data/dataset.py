@@ -45,7 +45,11 @@ class EuclideanDataset(Dataset):
 
         # Find all data files for the specified partition and split
         self.data_files = list((self.data_dir / partition.lower() / split).glob("*.pt"))
-
+        # with open(self.data_dir / partition.lower() / 'failed_path.txt', 'r') as f:
+        #     self.failed_path = [line.strip() for line in f.readlines()]
+        # print(len(self.data_files))
+        # self.data_files = [path for path in self.data_files if path.name not in self.failed_path]
+        # print(len(self.data_files))
         if len(self.data_files) == 0:
             raise ValueError(
                 f"No data files found for partition {partition} and split {split}"
@@ -91,4 +95,6 @@ class EuclideanDataset(Dataset):
             mol=mol,
             node_attr=node_attr,
             edge_attr=edge_attr,
+            data_path=data_path,
+            pos_prior=data.pos_prior
         )

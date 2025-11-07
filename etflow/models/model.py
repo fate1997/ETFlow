@@ -14,6 +14,7 @@ from etflow.models.base import BaseModel
 from etflow.models.loss import batchwise_l2_loss
 from etflow.models.utils import (
     HarmonicSampler,
+    RDKitSampler,
     center_of_mass,
     extend_bond_index,
     rmsd_align,
@@ -29,7 +30,7 @@ Config = TypeVar("Config", str, Dict[str, Any])
 class BaseFlow(BaseModel):
     """LightningModule for Flow Matching"""
 
-    __prior_types__ = ["gaussian", "harmonic"]
+    __prior_types__ = ["gaussian", "harmonic", "rdkit"]
     __interpolation_types__ = ["linear", "gvp", "gvp_w_sigma", "gvp_squared"]
 
     def __init__(
@@ -117,6 +118,8 @@ class BaseFlow(BaseModel):
 
         if prior_type == "harmonic":
             self.harmonic_sampler = HarmonicSampler(alpha=harmonic_alpha)
+        elif prior_type == "rdkit":
+            pass
 
     @classmethod
     def from_config(cls, cfg: Config):
@@ -250,6 +253,9 @@ class BaseFlow(BaseModel):
                 raise ValueError("x0 is NaN. Check edge_index for disconnected graphs!")
 
             return x0
+        # elif self.prior_type == "rdkit":
+        #     assert smiles is not None
+        #     return self.rdkit_sampler.sample(smiles, self.device)
 
         # gaussian prior if not harmonic
         return torch.randn(size=size, device=self.device)
@@ -326,17 +332,20 @@ class BaseFlow(BaseModel):
 
         # sample base distribution, either from harmonic or gaussian
         # x0 is sampling distribution and not data distribution
-        x0 = self.sample_base_dist(
-            pos.shape,
-            edge_index=bond_index,
-            batch=batch,
-            smiles=batched_data.get("smiles", None),
-        )
+        if self.prior_type == "rdkit":
+            x0 = batched_data.pos_prior
+        else:
+            x0 = self.sample_base_dist(
+                pos.shape,
+                edge_index=bond_index,
+                batch=batch,
+                smiles=batched_data.get("smiles", None),
+            )
 
         # sample time steps equal to number of molecules in a batch
         t = self.sample_time(num_samples=batch_size, stage=stage)
 
-        if self.prior_type == "harmonic":
+        if self.prior_type == "harmonic" or self.prior_type == "rdkit":
             x0 = rmsd_align(pos=x0, ref_pos=pos, batch=batch)
 
         # sample conditional vector field for positions

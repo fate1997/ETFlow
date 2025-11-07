@@ -81,10 +81,19 @@ def process_test_mol(mols: list[dm.Mol], partition: str):
 
         # get conformer positions from mol.GetConformer().GetPositions()
         pos = torch.tensor([mol.GetConformer().GetPositions() for mol in mols]).float()
+         
+        new_mol = dm.conformers.generate(mol, n_confs=5, method='ETKDGv2', add_hs=False, num_threads=5)
+        pos_prior = torch.from_numpy(new_mol.GetConformer(0).GetPositions()).float()
+        if pos_prior.shape[0] != pos.shape[1]:
+            log.warning(f"Skipping {smiles} due to shape mismatch")
+            print(pos_prior.shape, pos.shape, mol.GetNumAtoms(), new_mol.GetNumAtoms())
+            return None
+         
         data = Data(
             atomic_numbers=atomic_numbers,
             charges=atomic_charges,
             pos=pos,
+            pos_prior=pos_prior,
             smiles=smiles,
             subset=partition,
         )
@@ -155,12 +164,20 @@ def process_mol(
         if len(components) > 1:
             log.warning(f"Skipping {smiles} due to disconnected components")
             return None
+        
+        new_mol = dm.conformers.generate(mol, n_confs=5, method='ETKDGv2', add_hs=False, num_threads=5)
+        pos_prior = torch.from_numpy(new_mol.GetConformer(0).GetPositions()).float()
+        if pos_prior.shape[0] != positions.shape[1]:
+            log.warning(f"Skipping {smiles} due to shape mismatch")
+            print(pos_prior.shape, positions.shape, mol.GetNumAtoms(), new_mol.GetNumAtoms())
+            return None
 
         # Create single PyG Data object with all conformers
         data = Data(
             atomic_numbers=atomic_numbers,  # [num_atoms]
             charges=atomic_charges,  # [num_atoms]
             pos=positions,  # [num_conformers, num_atoms, 3]
+            pos_prior=pos_prior,
             energy=energies,  # [num_conformers, 1]
             smiles=smiles,
             subset=partition,
@@ -177,7 +194,7 @@ def main(raw_path: Path, output_dir: Path, data_dir: Path) -> None:
     log.info(f"Reading files from {raw_path}")
 
     # Create output directories for each partition and split
-    partitions = ["qm9", "drugs"]
+    partitions = ["qm9"]
     for partition in partitions:
         for split in ["train", "val", "test"]:
             (output_dir / partition / split).mkdir(parents=True, exist_ok=True)
@@ -206,38 +223,38 @@ def main(raw_path: Path, output_dir: Path, data_dir: Path) -> None:
         val_pkl_paths = [all_pkl_files[i] for i in val_split_indices]
 
         # Process each molecule
-        for split, pkl_paths in zip(["train", "val"], [train_pkl_paths, val_pkl_paths]):
-            # Process each pickle file in the current split
-            for pkl_path in tqdm(pkl_paths, desc=f"Processing {partition} {split}"):
-                # Extract molecule ID from path
-                mol_id = pkl_path.stem
+        # for split, pkl_paths in zip(["train", "val"], [train_pkl_paths, val_pkl_paths]):
+        #     # Process each pickle file in the current split
+        #     for pkl_path in tqdm(pkl_paths, desc=f"Processing {partition} {split}"):
+        #         # Extract molecule ID from path
+        #         mol_id = pkl_path.stem
 
-                # skip if file already exists
-                if (output_dir / partition / split / f"{mol_id}.pt").exists():
-                    continue
+        #         # skip if file already exists
+        #         if (output_dir / partition / split / f"{mol_id}.pt").exists():
+        #             continue
 
-                # Process molecule with all its conformers
-                data = process_mol(pkl_path, partition, split)
+        #         # Process molecule with all its conformers
+        #         data = process_mol(pkl_path, partition, split)
 
-                if data is None:
-                    skipped_mols += 1
-                    continue
+        #         if data is None:
+        #             skipped_mols += 1
+        #             continue
 
-                # Save molecule data in appropriate split directory
-                save_path = output_dir / partition / split / f"{mol_id}.pt"
+        #         # Save molecule data in appropriate split directory
+        #         save_path = output_dir / partition / split / f"{mol_id}.pt"
 
-                # Save the PyG Data object
-                torch.save(data, save_path)
+        #         # Save the PyG Data object
+        #         torch.save(data, save_path)
 
-                # Update statistics
-                stats[partition][split]["mols"] += 1
+        #         # Update statistics
+        #         stats[partition][split]["mols"] += 1
 
         # save test set data objects
         log.info(f"Processing test molecules for {partition}")
         test_mols: Dict[str, list[dm.Mol]] = load_pkl(
             data_dir / partition.upper() / "test_mols.pkl"
         )
-        for test_mol_id, test_mol in test_mols.items():
+        for test_mol_id, test_mol in tqdm(test_mols.items(), desc=f"Processing test molecules for {partition}"):
             data = process_test_mol(test_mol, partition)
             if data is None:
                 skipped_mols += 1
@@ -248,16 +265,16 @@ def main(raw_path: Path, output_dir: Path, data_dir: Path) -> None:
             torch.save(data, save_path)
 
     # Log statistics
-    log.info("Processing complete:")
-    for partition in partitions:
-        log.info(f"\n{partition.upper()} statistics:")
-        for split in ["train", "val", "test"]:
-            split_stats = stats[partition][split]
-            log.info(
-                f"- {split}: {split_stats['mols']} molecules, "
-                f"{split_stats['confs']} conformers"
-            )
-    log.info(f"Skipped molecules: {skipped_mols}")
+    # log.info("Processing complete:")
+    # for partition in partitions:
+    #     log.info(f"\n{partition.upper()} statistics:")
+    #     for split in ["train", "val", "test"]:
+    #         split_stats = stats[partition][split]
+    #         log.info(
+    #             f"- {split}: {split_stats['mols']} molecules, "
+    #             f"{split_stats['confs']} conformers"
+    #         )
+    # log.info(f"Skipped molecules: {skipped_mols}")
 
 
 if __name__ == "__main__":
@@ -283,7 +300,7 @@ if __name__ == "__main__":
     assert args.path.exists(), f"Path {args.path} not found"
     data_dir = Path(get_base_data_dir())
     # Verify the the splits are present
-    for partition in ["QM9", "DRUGS"]:
+    for partition in ["QM9"]:
         assert (
             data_dir / partition / "split.npy"
         ).exists(), f"Split not found in {partition}"

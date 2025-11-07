@@ -1,4 +1,5 @@
-
+dataset/
+*debug.ipynb
 *.csv
 
 **/__pycache__/

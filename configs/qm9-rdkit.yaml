@@ -1,5 +1,5 @@
 # task name for logging
-task_name: flow-qm9/base
+task_name: flow-qm9/ETKDGv2-prior
 
 # unique seed for experiment reproducibility
 seed: 42
@@ -7,6 +7,7 @@ seed: 42
 # data config
 datamodule: BaseDataModule
 datamodule_args:
+    data_dir: /home/rengp/projects/PlayGround/ETFlow/dataset/processed # change this to your own path
     partition: qm9
     dataloader_args:
         batch_size: 64
@@ -42,7 +43,7 @@ model_args:
 
     # flow matching specific
     sigma: 0.1
-    prior_type: gaussian
+    prior_type: rdkit
 
     # optimizer args
     optimizer_type: AdamW

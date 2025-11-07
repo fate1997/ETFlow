@@ -268,3 +268,26 @@ def rmsd_align(pos, ref_pos, batch):
         aligned_pos.append(pos_i)
 
     return torch.concat(aligned_pos, dim=0)
+
+
+from rdkit import Chem
+from rdkit.Chem import AllChem
+from typing import List
+
+
+class RDKitSampler:
+    def __init__(self):
+        self.ps = AllChem.ETKDGv2()
+    
+    def sample(self, smiles_list: List[str], device: str = 'cuda'):
+        pos_batch = []
+        for smiles in smiles_list:
+            params = Chem.SmilesParserParams()
+            params.removeHs = False
+            rdmol = Chem.MolFromSmiles(smiles, params)
+            AllChem.EmbedMolecule(rdmol, self.ps)
+            pos = rdmol.GetConformer().GetPositions()
+            pos = torch.from_numpy(pos).float().to(device)
+            pos_batch.append(pos)
+        pos_batch = torch.cat(pos_batch, dim=0)
+        return pos_batch
