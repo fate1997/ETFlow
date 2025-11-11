@@ -117,6 +117,7 @@ def main(config: dict, checkpoint_path: str, output_dir: str, debug: bool):
                     chiral_index=chiral_index,
                     chiral_nbr_index=chiral_nbr_index,
                     chiral_tag=chiral_tag,
+                    pos_prior=getattr(batched_data, "pos_prior", None).to(device),
                     **eval_args.get("sampler_args", {}),
                 )
             end = time.time()
@@ -171,8 +172,7 @@ if __name__ == "__main__":
     if not debug:
         log.info("Starting wandb...")
         wandb.init(
-            project="Energy-Aware-MCG",
-            entity="doms-lab",
+            project="ET-Flow",
             name=f"Sample Generation: {task_name}",
         )
 
