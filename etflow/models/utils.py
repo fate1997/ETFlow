@@ -277,7 +277,7 @@ from typing import List
 
 class RDKitSampler:
     def __init__(self):
-        self.ps = AllChem.ETKDGv2()
+        self.ps = AllChem.ETDG()
     
     def sample(self, smiles_list: List[str], device: str = 'cuda'):
         pos_batch = []
@@ -285,7 +285,8 @@ class RDKitSampler:
             params = Chem.SmilesParserParams()
             params.removeHs = False
             rdmol = Chem.MolFromSmiles(smiles, params)
-            AllChem.EmbedMolecule(rdmol, self.ps)
+            # AllChem.EmbedMultipleConfs(rdmol, self.ps, numConfs=5)
+            AllChem.Compute2DCoords(rdmol)
             pos = rdmol.GetConformer().GetPositions()
             pos = torch.from_numpy(pos).float().to(device)
             pos_batch.append(pos)

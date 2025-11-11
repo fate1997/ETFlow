@@ -171,6 +171,11 @@ def process_mol(
             log.warning(f"Skipping {smiles} due to shape mismatch")
             print(pos_prior.shape, positions.shape, mol.GetNumAtoms(), new_mol.GetNumAtoms())
             return None
+        if [atom.GetAtomicNum() for atom in new_mol.GetAtoms()] != atomic_numbers.tolist():
+            log.warning(f"Skipping {smiles} due to atomic numbers mismatch")
+            print([atom.GetAtomicNum() for atom in mol.GetAtoms()], atomic_numbers.tolist())
+            raise ValueError(f"Atomic numbers mismatch for {smiles}")
+            return None
 
         # Create single PyG Data object with all conformers
         data = Data(
@@ -223,31 +228,31 @@ def main(raw_path: Path, output_dir: Path, data_dir: Path) -> None:
         val_pkl_paths = [all_pkl_files[i] for i in val_split_indices]
 
         # Process each molecule
-        # for split, pkl_paths in zip(["train", "val"], [train_pkl_paths, val_pkl_paths]):
-        #     # Process each pickle file in the current split
-        #     for pkl_path in tqdm(pkl_paths, desc=f"Processing {partition} {split}"):
-        #         # Extract molecule ID from path
-        #         mol_id = pkl_path.stem
+        for split, pkl_paths in zip(["train", "val"], [train_pkl_paths, val_pkl_paths]):
+            # Process each pickle file in the current split
+            for pkl_path in tqdm(pkl_paths, desc=f"Processing {partition} {split}"):
+                # Extract molecule ID from path
+                mol_id = pkl_path.stem
 
-        #         # skip if file already exists
-        #         if (output_dir / partition / split / f"{mol_id}.pt").exists():
-        #             continue
+                # skip if file already exists
+                if (output_dir / partition / split / f"{mol_id}.pt").exists():
+                    continue
 
-        #         # Process molecule with all its conformers
-        #         data = process_mol(pkl_path, partition, split)
+                # Process molecule with all its conformers
+                data = process_mol(pkl_path, partition, split)
 
-        #         if data is None:
-        #             skipped_mols += 1
-        #             continue
+                if data is None:
+                    skipped_mols += 1
+                    continue
 
-        #         # Save molecule data in appropriate split directory
-        #         save_path = output_dir / partition / split / f"{mol_id}.pt"
+                # Save molecule data in appropriate split directory
+                save_path = output_dir / partition / split / f"{mol_id}.pt"
 
-        #         # Save the PyG Data object
-        #         torch.save(data, save_path)
+                # Save the PyG Data object
+                torch.save(data, save_path)
 
-        #         # Update statistics
-        #         stats[partition][split]["mols"] += 1
+                # Update statistics
+                stats[partition][split]["mols"] += 1
 
         # save test set data objects
         log.info(f"Processing test molecules for {partition}")
@@ -311,6 +316,7 @@ if __name__ == "__main__":
     # Create output directory as output_dir/processed
     if args.output_dir is not None:
         args.output_dir.mkdir(parents=True, exist_ok=True)
+        output_dir = args.output_dir
     else:
         output_dir = Path(get_base_data_dir()) / "processed"
         output_dir.mkdir(parents=True, exist_ok=True)

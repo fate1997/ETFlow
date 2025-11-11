@@ -1,5 +1,5 @@
 # task name for logging
-task_name: flow-qm9/ETKDGv2-prior
+task_name: flow-qm9/coord-2d-prior
 
 # unique seed for experiment reproducibility
 seed: 42

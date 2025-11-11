@@ -119,7 +119,7 @@ class BaseFlow(BaseModel):
         if prior_type == "harmonic":
             self.harmonic_sampler = HarmonicSampler(alpha=harmonic_alpha)
         elif prior_type == "rdkit":
-            pass
+            self.rdkit_sampler = RDKitSampler()
 
     @classmethod
     def from_config(cls, cfg: Config):
@@ -253,9 +253,9 @@ class BaseFlow(BaseModel):
                 raise ValueError("x0 is NaN. Check edge_index for disconnected graphs!")
 
             return x0
-        # elif self.prior_type == "rdkit":
-        #     assert smiles is not None
-        #     return self.rdkit_sampler.sample(smiles, self.device)
+        elif self.prior_type == "rdkit":
+            assert smiles is not None
+            return self.rdkit_sampler.sample(smiles, self.device)
 
         # gaussian prior if not harmonic
         return torch.randn(size=size, device=self.device)
@@ -332,9 +332,10 @@ class BaseFlow(BaseModel):
 
         # sample base distribution, either from harmonic or gaussian
         # x0 is sampling distribution and not data distribution
-        if self.prior_type == "rdkit":
+        if self.prior_type == "rdkit" and False:
             x0 = batched_data.pos_prior
         else:
+            print(self.prior_type)
             x0 = self.sample_base_dist(
                 pos.shape,
                 edge_index=bond_index,
@@ -400,6 +401,7 @@ class BaseFlow(BaseModel):
         t_max: float = 1.0,
         std: float = 1.0,
         sampler_type: str = "ode",
+        pos_prior: Tensor = None,
     ):
         """
         By default performs ODE (sampler_type="ode") sampling
@@ -407,8 +409,17 @@ class BaseFlow(BaseModel):
         """
         t_schedule = torch.linspace(0, 1.0, steps=n_timesteps + 1, device=self.device)
 
+        if self.prior_type == "rdkit" and False:
+            x0 = pos_prior
+        else:
+            x0 = self.sample_base_dist(
+                (z.size(0), 3),
+                edge_index=bond_index,
+                batch=batch,
+            )
+        
         x = center_of_mass(
-            self.sample_base_dist((z.size(0), 3), bond_index, batch), batch=batch
+            x0, batch=batch
         )
         gamma = torch.tensor(s_churn / n_timesteps).to(self.device)
 

@@ -30,8 +30,7 @@ if __name__ == "__main__":
 
     # log on weight and biases
     wandb.init(
-        project="Energy-Aware-MCG",
-        entity="doms-lab",
+        project="ET-Flow",
         name=f"Evaluation Coverage and Matching: Path {path}",
     )
 
