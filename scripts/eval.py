@@ -118,6 +118,7 @@ def main(config: dict, checkpoint_path: str, output_dir: str, debug: bool):
                     chiral_nbr_index=chiral_nbr_index,
                     chiral_tag=chiral_tag,
                     pos_prior=getattr(batched_data, "pos_prior", None).to(device),
+                    smiles=batched_data.get("smiles", None),
                     **eval_args.get("sampler_args", {}),
                 )
             end = time.time()

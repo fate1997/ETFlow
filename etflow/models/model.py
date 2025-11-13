@@ -30,7 +30,7 @@ Config = TypeVar("Config", str, Dict[str, Any])
 class BaseFlow(BaseModel):
     """LightningModule for Flow Matching"""
 
-    __prior_types__ = ["gaussian", "harmonic", "rdkit"]
+    __prior_types__ = ["gaussian", "harmonic", "rdkit", "etkdgv2"]
     __interpolation_types__ = ["linear", "gvp", "gvp_w_sigma", "gvp_squared"]
 
     def __init__(
@@ -255,7 +255,12 @@ class BaseFlow(BaseModel):
             return x0
         elif self.prior_type == "rdkit":
             assert smiles is not None
-            return self.rdkit_sampler.sample(smiles, self.device)
+            x0 = self.rdkit_sampler.sample(smiles, self.device)
+            x0 = center_of_mass(x0, batch=batch)
+            noise = torch.randn_like(x0)
+            noise = center_of_mass(noise, batch=batch)
+            x0 = x0 + noise * self.sigma
+            return x0
 
         # gaussian prior if not harmonic
         return torch.randn(size=size, device=self.device)
@@ -332,10 +337,15 @@ class BaseFlow(BaseModel):
 
         # sample base distribution, either from harmonic or gaussian
         # x0 is sampling distribution and not data distribution
-        if self.prior_type == "rdkit" and False:
-            x0 = batched_data.pos_prior
+        if self.prior_type == "etkdgv2":
+            x0 = batched_data.get("pos_prior", None)
+            x0 = center_of_mass(x0, batch=batch)
+            if x0 is None:
+                raise ValueError("pos_prior is not provided")
+            noise = torch.randn_like(x0)
+            noise = center_of_mass(noise, batch=batch)
+            x0 = x0 + noise * self.sigma
         else:
-            print(self.prior_type)
             x0 = self.sample_base_dist(
                 pos.shape,
                 edge_index=bond_index,
@@ -346,7 +356,7 @@ class BaseFlow(BaseModel):
         # sample time steps equal to number of molecules in a batch
         t = self.sample_time(num_samples=batch_size, stage=stage)
 
-        if self.prior_type == "harmonic" or self.prior_type == "rdkit":
+        if self.prior_type == "harmonic" or self.prior_type == "rdkit" or self.prior_type == "etkdgv2":
             x0 = rmsd_align(pos=x0, ref_pos=pos, batch=batch)
 
         # sample conditional vector field for positions
@@ -402,6 +412,7 @@ class BaseFlow(BaseModel):
         std: float = 1.0,
         sampler_type: str = "ode",
         pos_prior: Tensor = None,
+        smiles: Optional[str] = None,
     ):
         """
         By default performs ODE (sampler_type="ode") sampling
@@ -409,13 +420,18 @@ class BaseFlow(BaseModel):
         """
         t_schedule = torch.linspace(0, 1.0, steps=n_timesteps + 1, device=self.device)
 
-        if self.prior_type == "rdkit" and False:
+        if self.prior_type == "etkdgv2":
             x0 = pos_prior
+            x0 = center_of_mass(x0, batch=batch)
+            noise = torch.randn_like(x0)
+            noise = center_of_mass(noise, batch=batch)
+            x0 = x0 + noise * self.sigma
         else:
             x0 = self.sample_base_dist(
                 (z.size(0), 3),
                 edge_index=bond_index,
                 batch=batch,
+                smiles=smiles,
             )
         
         x = center_of_mass(
