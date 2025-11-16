@@ -25,6 +25,7 @@ from etflow.networks.torchmd_net import TorchMDDynamics
 __all__ = ["BaseFlow"]
 
 Config = TypeVar("Config", str, Dict[str, Any])
+START_NOISE_SCALE = 0.1
 
 
 class BaseFlow(BaseModel):
@@ -259,7 +260,7 @@ class BaseFlow(BaseModel):
             x0 = center_of_mass(x0, batch=batch)
             noise = torch.randn_like(x0)
             noise = center_of_mass(noise, batch=batch)
-            x0 = x0 + noise * self.sigma
+            x0 = x0 + noise * START_NOISE_SCALE
             return x0
 
         # gaussian prior if not harmonic
@@ -344,7 +345,7 @@ class BaseFlow(BaseModel):
                 raise ValueError("pos_prior is not provided")
             noise = torch.randn_like(x0)
             noise = center_of_mass(noise, batch=batch)
-            x0 = x0 + noise * self.sigma
+            x0 = x0 + noise * START_NOISE_SCALE
         else:
             x0 = self.sample_base_dist(
                 pos.shape,
@@ -413,6 +414,7 @@ class BaseFlow(BaseModel):
         sampler_type: str = "ode",
         pos_prior: Tensor = None,
         smiles: Optional[str] = None,
+        return_traj: bool = False,
     ):
         """
         By default performs ODE (sampler_type="ode") sampling
@@ -425,7 +427,7 @@ class BaseFlow(BaseModel):
             x0 = center_of_mass(x0, batch=batch)
             noise = torch.randn_like(x0)
             noise = center_of_mass(noise, batch=batch)
-            x0 = x0 + noise * self.sigma
+            x0 = x0 + noise * START_NOISE_SCALE
         else:
             x0 = self.sample_base_dist(
                 (z.size(0), 3),
@@ -440,6 +442,7 @@ class BaseFlow(BaseModel):
         gamma = torch.tensor(s_churn / n_timesteps).to(self.device)
 
         n = t_schedule.size(0) - 1
+        traj = [x]
         for i in range(n):
             t = t_schedule[i].repeat(x.size(0))
             t = unsqueeze_like(t, x)
@@ -491,12 +494,15 @@ class BaseFlow(BaseModel):
                 )
                 # update step
                 x = x_prev + v_t_prev * (delta_t + delta_hat)
+            traj.append(x)
 
         if self.parity_switch == "post_hoc":
             x = self.switch_parity_of_pos(
                 x, chiral_index, chiral_nbr_index, chiral_tag, batch
             )
-
+            traj.append(x)
+        if return_traj:
+            return x, traj
         return x
 
     @torch.no_grad()
